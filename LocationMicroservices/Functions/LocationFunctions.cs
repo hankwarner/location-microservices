@@ -17,10 +17,10 @@ namespace LocationMicroservices
 
 
         [FunctionName("GetLogonLocationData")]
-        [ProducesResponseType((int)HttpStatusCode.OK, Type = typeof(Dictionary<string, LocationData>))]
-        [ProducesResponseType((int)HttpStatusCode.BadRequest, Type = typeof(BadRequestObjectResult))]
-        [ProducesResponseType((int)HttpStatusCode.NotFound, Type = typeof(NotFoundObjectResult))]
-        [ProducesResponseType((int)HttpStatusCode.InternalServerError, Type = typeof(StatusCodeResult))]
+        [ProducesResponseType(typeof(Dictionary<string, LocationData>), 200)]
+        [ProducesResponseType(typeof(BadRequestObjectResult), 400)]
+        [ProducesResponseType(typeof(NotFoundObjectResult), 404)]
+        [ProducesResponseType(typeof(ObjectResult), 500)]
         public static IActionResult GetLogonLocationData(
             [HttpTrigger(AuthorizationLevel.Function, "get", Route = "location/{branchNumber}")] HttpRequest req,
             string branchNumber, 
@@ -32,27 +32,29 @@ namespace LocationMicroservices
 
                 var logonLocationData = _services.RequestLogonLocationData(branchNumber);
 
-                if (logonLocationData != null)
-                    return new OkObjectResult("");
-
-                var message = $"No logon locations found for branch number: {branchNumber}";
-                log.LogWarning(message);
-
-                return new NotFoundObjectResult("Invalid branch number")
+                if (logonLocationData == null)
                 {
-                    Value = message,
-                    StatusCode = 404
-                };
+                    var message = $"No logon locations found for branch number: {branchNumber}";
+                    log.LogWarning(message);
+
+                    return new NotFoundObjectResult("Invalid branch number") { Value = message, StatusCode = 404 };
+                }
+
+                return new OkObjectResult(logonLocationData);
             }
             catch(Exception ex)
             {
                 var title = "Exception in GetLogonLocationData";
-                log.LogError(ex, title);
+                log.LogError(@"{0}: {1}", title, ex);
+#if !DEBUG
                 var teamsMessage = new TeamsMessage(title, $"Error: {ex.Message}. Stacktrace: {ex.StackTrace}", "red", errorLogsUrl);
                 teamsMessage.LogToTeams(teamsMessage);
-
-                return new StatusCodeResult(500);
+#endif
+                return new ObjectResult(ex.Message) { StatusCode = 500, Value = "Failure" };
             }
         }
+
+
+        // GetBranchLogonID
     }
 }

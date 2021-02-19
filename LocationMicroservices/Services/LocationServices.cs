@@ -23,13 +23,15 @@ namespace LocationMicroservices.Services
         {
             var retryPolicy = Policy.Handle<SqlException>().Retry(3, (ex, count) =>
             {
-                const string errorMessage = "SqlException in RequestLogonLocationData";
-                _logger.LogWarning(ex, $"{errorMessage} . Retrying...");
+                var title = "SqlException in RequestLogonLocationData";
+                _logger.LogWarning(@"{0}. Retrying.... {1}", title, ex);
                 if (count == 3)
                 {
+#if !DEBUG
                     var teamsMessage = new TeamsMessage(errorMessage, $"Error: {ex.Message}. Stacktrace: {ex.StackTrace}", "red", LocationFunctions.errorLogsUrl);
                     teamsMessage.LogToTeams(teamsMessage);
-                    _logger.LogError(ex, errorMessage);
+#endif
+                    _logger.LogError(@"{0}: {1}", title, ex);
                 }
             });
 
@@ -42,14 +44,14 @@ namespace LocationMicroservices.Services
                     conn.Open();
 
                     var query = @"
-                        SELECT BranchNumber, Address1, Address2, City, State, Zip, OverpackCapable, ProcessingTime, 
-                               WarehouseManagementSoftware, BranchLocation, DCLocation, SODLocation, Logon, ShipHub, FedExESTCutoffTimes 
-                        FROM [FergusonIntegration].[sourcing].[DistributionCenter] 
+                        SELECT BranchNumber, Address1, City, State, Zip, OverpackCapable, ProcessingTime, 
+                                WarehouseManagementSoftware, BranchLocation, DCLocation, SODLocation, Logon, ShipHub, FedExESTCutoffTimes 
+                        FROM Data.DistributionCenter
                         WHERE 
-                            Logon in ('D98 DISTRIBUTION CENTERS', (SELECT Logon FROM [FergusonIntegration].[sourcing].[DistributionCenter] WHERE BranchNumber = @branch)) 
+                            Logon in ('D98 DISTRIBUTION CENTERS', (SELECT Logon FROM Data.DistributionCenter WHERE BranchNumber = '58')) 
                             AND Active = 1 AND Zip != '0' AND BranchNumber != '39'";
 
-                    var results = conn.Query<LocationData>(query, new { branch }, commandTimeout: 3).ToList();
+                    var results = conn.Query<LocationData>(query, new { branch }, commandTimeout: 6).ToList();
 
                     var logonLocationData = results.ToDictionary(locationData => locationData.BranchNumber);
 
